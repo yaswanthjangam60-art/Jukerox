@@ -1,69 +1,88 @@
-const express = require("express")
-const fetch = require("node-fetch")
+const express = require("express");
+const fetch = require("node-fetch");
 
-const app = express()
+const app = express();
 
-app.use(express.json())
+app.use(express.json());
 
-const CLIENT_ID = process.env.CLIENT_ID
-const CLIENT_SECRET = process.env.CLIENT_SECRET
-const REFRESH_TOKEN = process.env.REFRESH_TOKEN
+const CLIENT_ID = process.env.CLIENT_ID;
+const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const REFRESH_TOKEN = process.env.REFRESH_TOKEN;
 
 
-async function getAccessToken(){
 
-const auth = Buffer.from(CLIENT_ID + ":" + CLIENT_SECRET).toString("base64")
+async function getAccessToken() {
 
-const res = await fetch("https://accounts.spotify.com/api/token",{
-method:"POST",
-headers:{
-Authorization:"Basic "+auth,
-"Content-Type":"application/x-www-form-urlencoded"
-},
-body:"grant_type=refresh_token&refresh_token="+REFRESH_TOKEN
-})
+    const auth = Buffer.from(CLIENT_ID + ":" + CLIENT_SECRET).toString("base64");
 
-const data = await res.json()
+    const res = await fetch("https://accounts.spotify.com/api/token", {
+        method: "POST",
+        headers: {
+            "Authorization": "Basic " + auth,
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: "grant_type=refresh_token&refresh_token=" + REFRESH_TOKEN
+    });
 
-return data.access_token
+    const data = await res.json();
+
+    if (!data.access_token) {
+        throw new Error("Failed to get access token");
+    }
+
+    return data.access_token;
 }
 
 
-app.post("/queue", async (req,res)=>{
 
-try{
+app.post("/queue", async (req, res) => {
 
-const trackId = req.body.track_id
+    try {
 
-if(!trackId){
-return res.status(400).send({error:"track_id missing"})
-}
+        const trackId = req.body.track_id;
 
-const token = await getAccessToken()
+        if (!trackId) {
+            return res.status(400).json({ error: "track_id missing" });
+        }
 
-await fetch(`https://api.spotify.com/v1/me/player/queue?uri=spotify:track:${trackId}`,{
-method:"POST",
-headers:{
-Authorization:"Bearer "+token
-}
-})
+        const token = await getAccessToken();
 
-res.send({status:"queued", track:trackId})
+        const spotifyRes = await fetch(
+            `https://api.spotify.com/v1/me/player/queue?uri=spotify:track:${trackId}`,
+            {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + token
+                }
+            }
+        );
 
-}catch(e){
+        if (!spotifyRes.ok) {
+            const text = await spotifyRes.text();
+            return res.status(500).json({ error: text });
+        }
 
-res.status(500).send({error:e.toString()})
+        res.json({ status: "queued", track: trackId });
 
-}
+    } catch (err) {
 
-})
+        console.error(err);
+        res.status(500).json({ error: err.message });
+
+    }
+
+});
 
 
-app.get("/",(req,res)=>{
-res.send("Jukerox API running")
-})
+
+app.get("/", (req, res) => {
+    res.send("Jukerox API running");
+});
 
 
-app.listen(process.env.PORT || 3000,()=>{
-console.log("Server started")
-})
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+    console.log("Server running on port " + PORT);
+});
